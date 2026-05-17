@@ -1,72 +1,77 @@
-File Partitioning Tool (File Splitter)
-Overview
+# PMD File Splitter & MergerThis program provides a simple binary file splitter and merger with optionalfake (random) chunks injected into the output.  It generates a `.pmd` metadata file that describes how the chunks were created,and the merger uses the PMD file to reconstruct the original file.---## Features- Split any binary file into **1 to 8 chunks**- Optional insertion of **fake chunks** to obfuscate the real structure- Generates a `.pmd` metadata file describing:  - original file name  - chunk size  - number of chunks  - extra bytes in the last chunk  - bitmask describing which chunks are fake- Merge chunks back into a single file using the `.pmd`- Supports merging from a specific chunk via `-r`---## BuildCompile using GCC:
 
-This is a high-performance C-based utility designed to split any binary file into multiple smaller parts (chunks). The program calculates the file size, determines the optimal chunk size, and handles any remaining bytes by appending them to the final partition to ensure data integrity.
-Features
+gcc code1.c -o splitter
 
-    Dynamic Partitioning: Splits files into a user-defined number of parts (up to 8).
+---## Usage### 1. Split a file (`-p` mode)
 
-    Binary Safe: Works with images, videos, documents, and executable files.
-
-    Precision Handling: Automatically manages the remainder bytes (modulus) to ensure no data is lost during the split.
-
-    Optimized Memory: Uses dynamic memory allocation (malloc) to handle large data chunks efficiently.
-
-How It Works
-
-    Size Calculation: The program uses fseek and ftell to find the exact byte size of the source file.
-
-    Memory Allocation: It allocates a buffer large enough to hold one chunk plus any extra bytes.
-
-    Chunking Logic:
-
-        It divides the total bytes by the number of parts.
-
-        It reads from the source and writes to a new file named [original_name].[index].
-
-        The final chunk is adjusted to include any leftover bytes from the division.
-
-Usage
-Compilation
-
-Use any standard C compiler (like GCC):
-Bash
-
-gcc main.c -o file_splitter
-
-Execution
-
-The program requires two arguments: the filename and the number of parts (1-8).
-Bash
-
-./file_splitter <filename> <number_of_parts>
+./splitter -p <num_chunks>
 
 Example:
-To split a photo named image.bmp into 4 parts:
-Bash
 
-./file_splitter image.bmp 4
+./splitter -p image.jpeg 4
 
-This will generate:
+Output:
 
-    image.bmp.0
+image.jpeg.0 image.jpeg.1 image.jpeg.2 image.jpeg.3 image.jpeg.pmd
 
-    image.bmp.1
+---### Add fake chunks (optional)
 
-    image.bmp.2
+./splitter -p <num_chunks> -R <num_fake_chunks>
 
-    image.bmp.3
+Example:
 
-Technical Specifications
+./splitter -p image.jpeg 4 -R 2
 
-    Language: C (Standard)
+This creates:- 4 real chunks  - 2 fake random chunks  - A PMD file describing which chunks are fake via a bitmask.---## 2. Merge a file (`-m` mode)### Basic merge (no fake chunks)
 
-    Memory Management: Heap-based allocation with safety free().
+./splitter -m <pmd_file>
 
-    Max Partitions: 8 (Configurable in code).
+Example:
 
-    File Mode: rb (Read Binary) / wb (Write Binary).
+./splitter -m image.jpeg.pmd
 
-License
+Outputs:
 
-This project is open-source and free to use for educational and development purposes.
+image.jpeg.m
+
+---### Merge including fake chunks (`-R`)If splitting was done using fake chunks, use:
+
+./splitter -m <pmd_file> -R <output_file>
+
+Example:
+
+./splitter -m image.jpeg.pmd -R final.jpeg
+
+---### Merge starting from a specific chunk (`-r`)
+
+./splitter -m <pmd_file> -r <start_chunk> <output_file>
+
+Example:
+
+./splitter -m image.jpeg.pmd -r 0 rebuilt.jpeg
+
+This starts merging at the given chunk index.---## How Fake Chunks WorkFake chunks are generated using a deterministic pseudo-random generator.A bitmask stored in `meta.rb` marks which chunk indices are fake.Example bitmask (binary):
+
+001010
+
+Meaning chunks:- 1 and 3 are fake  - All others are realDuring merge:- Fake chunks are skipped unless `-R` is used.---## File Structure (PMD)The PMD structure:```ctypedef struct pmd {    char name[256];      // original filename    long chunk_size;     // base chunk size    int extra_bytes;     // bytes added to last chunk    int num_chunks;      // number of real chunks    unsigned short rb;   // bitmask of fake chunks} pmd;
+
+The .pmd file contains only metadata — not the actual chunk data.
+Integrity Checking
+
+During merge, the program verifies:
+
+    All required chunk files exist
+    Chunk sizes match what the PMD file expects
+    Total file size is below 1MB
+
+If any check fails, merging stops.
+Notes
+
+    This tool does not compress or encrypt data.
+    Fake chunks only add noise; they do not affect real data.
+    The .pmd file is required to rebuild the original file correctly.
+
+Example Workflow
+
+# Split into 4 parts + 2 fake parts./splitter -p e1.jpeg 4 -R 2# Rebuild original, respecting fake chunks./splitter -m e1.jpeg.pmd -R recovered.jpeg
